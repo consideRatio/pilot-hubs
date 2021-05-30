@@ -52,6 +52,9 @@ basehub:
       extraEnv:
         # The default worker image matches the singleuser image.
         DASK_GATEWAY__CLUSTER__OPTIONS__IMAGE: '{JUPYTER_IMAGE_SPEC}'
+        DASK_DISTRIBUTED__DASHBOARD_LINK: '/user/{JUPYTERHUB_USER}/proxy/{port}/status'
+        DASK_LABEXTENSION__FACTORY__MODULE: 'dask_gateway'
+        DASK_LABEXTENSION__FACTORY__CLASS: 'GatewayCluster'
 
     hub:
       networkPolicy:
@@ -151,46 +154,79 @@ dask-gateway:
 
     # TODO: figure out a replacement for userLimits.
     extraConfig:
-      optionHandler: |
-        from dask_gateway_server.options import Options, Integer, Float, String, Mapping
-
+      # This configuration represents options that can be presented to users
+      # that want to create a Dask cluster using dask-gateway. For more
+      # details, see https://gateway.dask.org/cluster-options.html
+      #
+      # The goal is to provide a simple configuration that allow the user some
+      # flexibility while also fitting well well on AWS nodes that are all
+      # having 1:4 ratio between CPU and GB of memory. By providing the
+      # username label, we help administrators to track user pods.
+      option_handler: |
+        from dask_gateway_server.options import Options, Select, String, Mapping
         def cluster_options(user):
             def option_handler(options):
                 if ":" not in options.image:
                     raise ValueError("When specifying an image you must also provide a tag")
-                # FIXME: No user labels or annotations, until https://github.com/pangeo-data/pangeo-cloud-federation/issues/879
-                # is fixed.
+
+                # FIXME: No user labels or annotations, until
+                #        https://github.com/pangeo-data/pangeo-cloud-federation/issues/879
+                #        is fixed. Its purpose is for housekeeping only though.
                 extra_annotations = {
-                    # "hub.jupyter.org/username": safe_username,
+                    # "hub.jupyter.org/username": user.name,
                     "prometheus.io/scrape": "true",
                     "prometheus.io/port": "8787",
                 }
                 extra_labels = {
-                    # "hub.jupyter.org/username": safe_username,
+                    # "hub.jupyter.org/username": user.name,
                 }
+                chosen_worker_cpu = int(options.worker_specification.split("CPU")[0])
+                chosen_worker_memory = 4 * chosen_worker_cpu
+
+                # We multiply the requests by a fraction to ensure that the
+                # worker fit well within a node that need some resources
+                # reserved for system pods.
                 return {
-                    "worker_cores_limit": options.worker_cores,
-                    "worker_cores": min(options.worker_cores / 2, 1),
-                    "worker_memory": "%fG" % options.worker_memory,
+                    # A default image is suggested via DASK_GATEWAY__CLUSTER__OPTIONS__IMAGE env variable
                     "image": options.image,
-                    "scheduler_extra_pod_annotations": extra_annotations,
-                    "worker_extra_pod_annotations": extra_annotations,
                     "scheduler_extra_pod_labels": extra_labels,
+                    "scheduler_extra_pod_annotations": extra_annotations,
                     "worker_extra_pod_labels": extra_labels,
+                    "worker_extra_pod_annotations": extra_annotations,
+                    "worker_cores": 0.80 * chosen_worker_cpu,
+                    "worker_cores_limit": chosen_worker_cpu,
+                    "worker_memory": "%fG" % (0.90 * chosen_worker_memory),
+                    "worker_memory_limit": "%fG" % chosen_worker_memory,
                     "environment": options.environment,
                 }
             return Options(
-                Integer("worker_cores", 2, min=1, label="Worker Cores"),
-                Float("worker_memory", 4, min=1, label="Worker Memory (GiB)"),
+                Select(
+                    "worker_specification",
+                    [
+                        "1CPU, 4GB",
+                        "2CPU, 8GB",
+                        "4CPU, 16GB",
+                        "8CPU, 32GB",
+                        "16CPU, 64GB",
+                        "32CPU, 128GB",
+                        "64CPU, 256GB",
+                    ],
+                    default="1CPU, 4GB",
+                    label="Worker specification",
+                ),
                 # The default image is set via DASK_GATEWAY__CLUSTER__OPTIONS__IMAGE env variable
                 String("image", label="Image"),
-                Mapping("environment", {}, label="Environment Variables"),
+                Mapping("environment", {}, label="Environment variables"),
                 handler=option_handler,
             )
         c.Backend.cluster_options = cluster_options
       idle: |
         # timeout after 30 minutes of inactivity
         c.KubeClusterConfig.idle_timeout = 1800
+      limits: |
+        # per Dask cluster limits.
+        c.ClusterConfig.cluster_max_cores = 256
+        c.ClusterConfig.cluster_max_memory = "1028G"
     prefix: "/services/dask-gateway"  # Users connect to the Gateway through the JupyterHub service.
     auth:
       type: jupyterhub  # Use JupyterHub to authenticate with Dask Gateway
