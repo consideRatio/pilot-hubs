@@ -68,7 +68,7 @@ hubs:
             cmd:
               - jupyterhub-singleuser
               - --LabApp.collaborative=True
-              - --ServerApp.allow_remote_access=True
+              - --NotebookApp.allow_remote_access=True
 
             extraEnv:
               # SCRATCH_BUCKET / PANGEO_SCRATCH are environment variables that
