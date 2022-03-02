@@ -126,7 +126,7 @@ class Cluster:
         print_colour("Provisioning support charts...")
 
         support_dir = (Path(__file__).parent.parent).joinpath("helm-charts", "support")
-        subprocess.check_call(["helm", "dep", "up", support_dir])
+        subprocess.check_call(["helm", "dep", "up", "--skip-refresh", support_dir])
 
         support_secrets_file = support_dir.joinpath("enc-support.secret.yaml")
         with tempfile.NamedTemporaryFile(mode="w") as f, get_decrypted_file(

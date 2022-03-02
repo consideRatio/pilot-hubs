@@ -181,11 +181,11 @@ def prepare_helm_charts_dependencies_and_schemas():
     """
     basehub_dir = helm_charts_dir.joinpath("basehub")
     _generate_values_schema_json(basehub_dir)
-    subprocess.check_call(["helm", "dep", "up", basehub_dir])
+    subprocess.check_call(["helm", "dep", "up", "--skip-refresh", basehub_dir])
 
     daskhub_dir = helm_charts_dir.joinpath("daskhub")
     _generate_values_schema_json(daskhub_dir)
-    subprocess.check_call(["helm", "dep", "up", daskhub_dir])
+    subprocess.check_call(["helm", "dep", "up", "--skip-refresh", daskhub_dir])
 
 
 def print_colour(msg: str):
