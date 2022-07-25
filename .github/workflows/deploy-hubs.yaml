@@ -91,7 +91,7 @@ jobs:
         if: |
           (steps.base_files.outputs.files == 'true') ||
           (steps.config_files.outputs.hub_config == 'true')
-        uses: azure/setup-helm@v2.0
+        uses: azure/setup-helm@v3.3
 
       - name: Setup sops
         if: |
