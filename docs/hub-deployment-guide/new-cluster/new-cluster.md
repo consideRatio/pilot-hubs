@@ -639,18 +639,24 @@ First, we need to grant the freshly created deployer IAM user access to the kube
   terraform output -raw eksctl_iam_command
   ```
 
-2. Run the `eksctl create iamidentitymapping` command returned by `terraform output`.
+2. Run the `eksctl create accessentry` and `aws eks associate-access-policy` commands returned by `terraform output`.
   That should give the continuous deployer user access.
 
-  The command should look like this:
+  The commands should look like this:
 
   ```bash
-  eksctl create iamidentitymapping \
+  eksctl create accessentry \
       --cluster $CLUSTER_NAME \
       --region $CLUSTER_REGION \
-      --arn arn:aws:iam::<aws-account-id>:user/hub-continuous-deployer \
-      --username hub-continuous-deployer \
-      --group system:masters
+      --principal-arn arn:aws:iam::<aws-account-id>:user/hub-continuous-deployer \
+      --kubernetes-username hub-continuous-deployer
+  aws eks associate-access-policy \
+      --cluster-name $CLUSTER_NAME \
+      --region $CLUSTER_REGION \
+      --principal-arn arn:aws:iam::<aws-account-id>:user/hub-continuous-deployer \
+      --policy-arn arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy \
+      --access-scope type=cluster \
+      --no-cli-pager
   ```
 
   Test the access by running:
@@ -666,47 +672,6 @@ First, we need to grant the freshly created deployer IAM user access to the kube
   ```
 
   It should show you the provisioned node on the cluster if everything works out ok.
-
-### Grant `eksctl` access to other users
-
-```{note}
-This section is still required even if the account is managed by SSO. Though a
-user could run `deployer use-cluster-credentials $CLUSTER_NAME` to gain access
-as well.
-```
-
-AWS EKS has a strange access control problem, where the IAM user who creates
-the cluster has [full access without any visible settings
-changes](https://docs.aws.amazon.com/eks/latest/userguide/add-user-role.html),
-and nobody else does. You need to explicitly grant access to other users. Find
-the usernames of the 2i2c engineers on this particular AWS account, and run the
-following command to give them access:
-
-```{note}
-You can modify the command output by running `terraform output -raw eksctl_iam_command` as described in [](new-cluster:terraform:cluster-credentials).
-```
-
-```bash
-eksctl create iamidentitymapping \
-   --cluster $CLUSTER_NAME \
-   --region $CLUSTER_REGION \
-   --arn arn:aws:iam::<aws-account-id>:user/<iam-user-name> \
-   --username <iam-user-name> \
-   --group system:masters
-```
-
-This gives all the users full access to the entire kubernetes cluster.
-After this step is done, they can fetch local config with:
-
-```bash
-aws eks update-kubeconfig --name=$CLUSTER_NAME --region=$CLUSTER_REGION
-```
-
-This should eventually be converted to use an [IAM Role] instead, so we need not
-give each individual user access, but just grant access to the role - and users
-can modify them as they wish.
-
-[iam role]: https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles.html
 ````
 
 ````{tab-item} Google Cloud
