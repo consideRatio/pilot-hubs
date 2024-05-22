@@ -638,11 +638,9 @@ Commit this file to the repo.
 ### Grant the deployer's IAM user access
 
 ```{note}
-This still works, but makes use of a deprecated system (`iamidentitymapping` and
-`aws-auth` ConfigMap in kube-system namespace) instead of the new system called
-[EKS access entries]. Migrating to the new system is [tracked by this github issue](https://github.com/2i2c-org/infrastructure/issues/4558).
-
-[eks access entries]: https://docs.aws.amazon.com/eks/latest/userguide/access-entries.html
+This was previously done using a deprecated system using commands like
+`eksctl create iamidentitymapping` that updated an `aws-auth` ConfigMap in the
+kube-system namespace.
 ```
 
 We need to grant the freshly created deployer IAM user access to the kubernetes cluster.
@@ -654,18 +652,24 @@ We need to grant the freshly created deployer IAM user access to the kubernetes 
   terraform output -raw eksctl_iam_command
   ```
 
-2. Run the `eksctl create iamidentitymapping` command returned by `terraform output`.
+2. Run the `eksctl create accessentry` and `aws eks associate-access-policy` commands returned by `terraform output`.
   That should give the continuous deployer user access.
 
-  The command should look like this:
+  The commands should look like this:
 
   ```bash
-  eksctl create iamidentitymapping \
+  eksctl create accessentry \
       --cluster $CLUSTER_NAME \
       --region $CLUSTER_REGION \
-      --arn arn:aws:iam::<aws-account-id>:user/hub-continuous-deployer \
-      --username hub-continuous-deployer \
-      --group system:masters
+      --principal-arn arn:aws:iam::<aws-account-id>:user/hub-continuous-deployer \
+      --kubernetes-username hub-continuous-deployer
+  aws eks associate-access-policy \
+      --cluster-name $CLUSTER_NAME \
+      --region $CLUSTER_REGION \
+      --principal-arn arn:aws:iam::<aws-account-id>:user/hub-continuous-deployer \
+      --policy-arn arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy \
+      --access-scope type=cluster \
+      --no-cli-pager
   ```
 
   Test the access by running:
@@ -681,20 +685,6 @@ We need to grant the freshly created deployer IAM user access to the kubernetes 
   ```
 
   It should show you the provisioned node on the cluster if everything works out ok.
-
-### (no longer needed) Grant `eksctl` access to other users
-
-Use of `eksctl create iamidentitymapping` was previously required step to grant
-access to other engineers, but after AWS introduced a new system (EKS access
-entries) in parallel to the now deprecated `iamidentitymapping` system, it seems
-AWS account admin users are no longer required to be granted access like this.
-
-To conclude, any AWS account admin authenticated should be able to acquire k8s
-cluster credentials like below without use of `eksctl create iamidentitymapping`:
-
-```bash
-aws eks update-kubeconfig --name=$CLUSTER_NAME --region=$CLUSTER_REGION
-```
 ````
 
 ````{tab-item} Google Cloud

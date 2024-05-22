@@ -43,13 +43,19 @@ output "continuous_deployer_creds" {
 }
 
 output "eksctl_iam_command" {
-  description = "eksctl command to grant cluster access to our CD"
+  description = "eksctl and aws commands to grant cluster access to our CD"
   value       = <<-EOT
-   eksctl create iamidentitymapping \
+   eksctl create accessentry \
       --cluster ${var.cluster_name} \
       --region ${var.region} \
-      --arn ${aws_iam_user.continuous_deployer.arn} \
-      --username ${aws_iam_user.continuous_deployer.name}  \
-      --group system:masters
+      --principal-arn ${aws_iam_user.continuous_deployer.arn} \
+      --kubernetes-username ${aws_iam_user.continuous_deployer.name}
+   aws eks associate-access-policy \
+      --cluster-name ${var.cluster_name} \
+      --region ${var.region} \
+      --principal-arn ${aws_iam_user.continuous_deployer.arn} \
+      --policy-arn arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy \
+      --access-scope type=cluster \
+      --no-cli-pager
   EOT
 }
